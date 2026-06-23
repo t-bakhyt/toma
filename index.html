@@ -21,13 +21,26 @@
   .b1{width:190px;height:190px;background:#ff9fc0;top:-50px;left:-40px;}
   .b2{width:230px;height:230px;background:#ff7aa8;bottom:-70px;right:-50px;}
 
+  /* переключатель режимов (временный, для выбора) */
+  .modes{
+    position:fixed;top:calc(8px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);
+    z-index:10;display:flex;gap:5px;align-items:center;flex-wrap:wrap;justify-content:center;
+    background:rgba(255,255,255,.82);backdrop-filter:blur(6px);
+    border-radius:999px;padding:6px 8px;box-shadow:0 8px 20px rgba(220,60,120,.18);max-width:96vw;
+  }
+  .mlabel{font-size:11px;font-weight:800;color:#b56e89;padding:0 4px;}
+  .mode{
+    border:none;background:#fff;border-radius:999px;padding:7px 11px;
+    font-family:inherit;font-weight:800;font-size:12px;cursor:pointer;color:#a9899a;
+    transition:background .15s,color .15s,transform .1s;
+  }
+  .mode:active{transform:scale(.92);}
+  .mode.active{background:#ff2e6e;color:#fff;}
+
   .card{
     position:relative;z-index:2;
-    background:rgba(255,255,255,.85);
-    backdrop-filter:blur(6px);
-    border-radius:32px;
-    padding:36px 26px 30px;
-    text-align:center;
+    background:rgba(255,255,255,.85);backdrop-filter:blur(6px);
+    border-radius:32px;padding:36px 26px 30px;text-align:center;
     max-width:440px;width:100%;
     box-shadow:0 20px 50px rgba(220,60,120,.25);
   }
@@ -40,19 +53,12 @@
   .btns{display:flex;gap:14px;justify-content:center;align-items:center;flex-wrap:wrap;}
   .btn{
     border:none;cursor:pointer;font-family:inherit;
-    font-size:19px;font-weight:900;border-radius:18px;padding:15px 32px;
-    transition:transform .12s;
+    font-size:19px;font-weight:900;border-radius:18px;padding:15px 32px;transition:transform .12s;
   }
   .btn:active{transform:scale(.95);}
-  .yes{
-    background:linear-gradient(135deg,#ff7aa8,#ff2e6e);color:#fff;
-    box-shadow:0 10px 22px rgba(255,46,110,.42);
-  }
+  .yes{background:linear-gradient(135deg,#ff7aa8,#ff2e6e);color:#fff;box-shadow:0 10px 22px rgba(255,46,110,.42);}
   .yes:hover{transform:scale(1.07) rotate(-1deg);}
-  .no{
-    background:#fff;color:#a9899a;border:2px solid #f3dde6;
-    transition:left .14s ease, top .14s ease, transform .12s;
-  }
+  .no{background:#fff;color:#a9899a;border:2px solid #f3dde6;will-change:left,top;}
 
   .win{display:none;position:relative;z-index:2;text-align:center;max-width:440px;}
   .win.show{display:block;animation:pop .5s cubic-bezier(.3,1.5,.5,1);}
@@ -67,6 +73,13 @@
 <body>
   <div class="blob b1"></div>
   <div class="blob b2"></div>
+
+  <div class="modes" id="modes">
+    <span class="mlabel">«Нет»:</span>
+    <button class="mode active" data-m="slide">🐢 плавно</button>
+    <button class="mode" data-m="lazy">😴 лениво</button>
+    <button class="mode" data-m="teleport">⚡ телепорт</button>
+  </div>
 
   <div class="card" id="card">
     <div class="emoji">💘</div>
@@ -87,36 +100,108 @@
 <script>
 (function(){
   "use strict";
-  var no = document.getElementById("no");
-  var yes = document.getElementById("yes");
+  var no   = document.getElementById("no");
+  var yes  = document.getElementById("yes");
   var card = document.getElementById("card");
-  var win = document.getElementById("win");
+  var win  = document.getElementById("win");
 
   var phrases = ["Нет","Неа 😜","Точно? 👀","Признавайся 🥰","От любви не убежишь 💘","Поймай ❤️","Ну скажи «Да» 😄","Врёшь 😆","Сердце не обманешь 💞"];
   var i = 0;
-  var moved = false;
 
-  function flee(){
-    var pad = 12;
-    var bw = no.offsetWidth, bh = no.offsetHeight;
-    var maxX = Math.max(pad, window.innerWidth  - bw - pad);
-    var maxY = Math.max(pad, window.innerHeight - bh - pad);
-    var x = pad + Math.random() * (maxX - pad);
-    var y = pad + Math.random() * (maxY - pad);
-    if(!moved){ no.style.position = "fixed"; moved = true; }
+  var mode = "slide";      // slide | lazy | teleport
+  var fixedOn = false;
+  var x = 0, y = 0;
+
+  function setTransition(){
+    no.style.transition =
+      mode === "slide"   ? "left .30s cubic-bezier(.2,.85,.3,1), top .30s cubic-bezier(.2,.85,.3,1), transform .12s" :
+      mode === "lazy"    ? "left .55s ease, top .55s ease, transform .12s" :
+                           "left .12s ease, top .12s ease, transform .12s";
+  }
+  function tease(){ i = (i + 1) % phrases.length; no.textContent = phrases[i]; }
+
+  function ensureFixed(){
+    if(fixedOn) return;
+    var r = no.getBoundingClientRect();
+    x = r.left; y = r.top;
+    no.style.position = "fixed";
+    no.style.margin = "0";
     no.style.left = x + "px";
     no.style.top  = y + "px";
-    i = (i + 1) % phrases.length;
-    no.textContent = phrases[i];
+    fixedOn = true;
+  }
+  function clamp(){
+    var pad = 10, bw = no.offsetWidth, bh = no.offsetHeight;
+    if(x < pad) x = pad;
+    if(y < pad) y = pad;
+    if(x > window.innerWidth  - bw - pad) x = window.innerWidth  - bw - pad;
+    if(y > window.innerHeight - bh - pad) y = window.innerHeight - bh - pad;
+  }
+  function put(){ no.style.left = x + "px"; no.style.top = y + "px"; }
+
+  function teleport(){
+    ensureFixed();
+    var pad = 12, bw = no.offsetWidth, bh = no.offsetHeight;
+    x = pad + Math.random() * Math.max(1, window.innerWidth  - bw - 2*pad);
+    y = pad + Math.random() * Math.max(1, window.innerHeight - bh - 2*pad);
+    put(); tease();
+  }
+  function dodge(px, py, step){
+    ensureFixed();
+    var r = no.getBoundingClientRect();
+    var cx = r.left + r.width/2, cy = r.top + r.height/2;
+    var dx = cx - px, dy = cy - py;
+    var d = Math.sqrt(dx*dx + dy*dy) || 1;
+    x += (dx/d)*step + (Math.random()*30 - 15);
+    y += (dy/d)*step + (Math.random()*30 - 15);
+    // если упёрся в край — отскок в случайную сторону
+    var pad = 10, bw = no.offsetWidth, bh = no.offsetHeight;
+    if(x <= pad || x >= window.innerWidth - bw - pad){ x = pad + Math.random()*(window.innerWidth  - bw - 2*pad); }
+    if(y <= pad || y >= window.innerHeight - bh - pad){ y = pad + Math.random()*(window.innerHeight - bh - 2*pad); }
+    clamp(); put(); tease();
   }
 
-  no.addEventListener("mouseenter", flee);
-  no.addEventListener("touchstart", function(e){ e.preventDefault(); flee(); }, {passive:false});
-  no.addEventListener("click", function(e){ e.preventDefault(); flee(); });
+  // ---- десктоп: реагируем на приближение курсора ----
+  document.addEventListener("mousemove", function(e){
+    if(win.classList.contains("show")) return;
+    if(mode === "teleport") return;            // в телепорте — на mouseenter
+    var r = no.getBoundingClientRect();
+    var cx = r.left + r.width/2, cy = r.top + r.height/2;
+    var dist = Math.sqrt(Math.pow(cx - e.clientX,2) + Math.pow(cy - e.clientY,2));
+    var th   = mode === "lazy" ? 78 : 110;
+    if(dist < th){
+      if(mode === "lazy" && Math.random() < 0.22) return;   // иногда даёт почти поймать
+      dodge(e.clientX, e.clientY, mode === "lazy" ? 95 : 150);
+    }
+  });
+  no.addEventListener("mouseenter", function(){ if(mode === "teleport") teleport(); });
 
+  // ---- телефон: уворачивается от касания ----
+  no.addEventListener("touchstart", function(e){
+    e.preventDefault();
+    if(mode === "teleport"){ teleport(); return; }
+    var t = e.touches[0];
+    dodge(t.clientX, t.clientY, mode === "lazy" ? 120 : 175);
+  }, {passive:false});
+  no.addEventListener("click", function(e){ e.preventDefault(); });
+
+  // ---- переключатель режимов ----
+  document.getElementById("modes").addEventListener("click", function(e){
+    var b = e.target.closest(".mode"); if(!b) return;
+    mode = b.getAttribute("data-m");
+    [].forEach.call(document.querySelectorAll(".mode"), function(m){ m.classList.toggle("active", m===b); });
+    // сброс кнопки на место
+    fixedOn = false; i = 0;
+    no.style.position = ""; no.style.left = ""; no.style.top = ""; no.style.margin = "";
+    no.textContent = "Нет";
+    setTransition();
+  });
+
+  // ---- "Да" ----
   yes.addEventListener("click", function(){
     card.style.display = "none";
     no.style.display = "none";
+    document.getElementById("modes").style.display = "none";
     win.classList.add("show");
     burst();
   });
@@ -142,6 +227,8 @@
       })();
     }
   }
+
+  setTransition();
 })();
 </script>
 </body>
