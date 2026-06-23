@@ -13,9 +13,7 @@
     background:linear-gradient(160deg,#fff0f4,#ffd9e6 40%,#ffe0ec);
     color:#46202f;
     display:flex;align-items:center;justify-content:center;
-    min-height:100%;
-    padding:24px;
-    position:relative;
+    min-height:100%;padding:24px;position:relative;
   }
   .blob{position:fixed;border-radius:50%;filter:blur(8px);opacity:.55;z-index:0;}
   .b1{width:190px;height:190px;background:#ff9fc0;top:-50px;left:-40px;}
@@ -41,8 +39,7 @@
     position:relative;z-index:2;
     background:rgba(255,255,255,.85);backdrop-filter:blur(6px);
     border-radius:32px;padding:36px 26px 30px;text-align:center;
-    max-width:440px;width:100%;
-    box-shadow:0 20px 50px rgba(220,60,120,.25);
+    max-width:440px;width:100%;box-shadow:0 20px 50px rgba(220,60,120,.25);
   }
   .emoji{font-size:64px;line-height:1;margin-bottom:10px;animation:bob 2.2s ease-in-out infinite;}
   @keyframes bob{0%,100%{transform:translateY(0) rotate(-5deg) scale(1)}50%{transform:translateY(-10px) rotate(5deg) scale(1.06)}}
@@ -59,6 +56,17 @@
   .yes{background:linear-gradient(135deg,#ff7aa8,#ff2e6e);color:#fff;box-shadow:0 10px 22px rgba(255,46,110,.42);}
   .yes:hover{transform:scale(1.07) rotate(-1deg);}
   .no{background:#fff;color:#a9899a;border:2px solid #f3dde6;will-change:left,top;}
+
+  /* бегущие ответы-отговорки */
+  .reaction{
+    position:fixed;left:50%;bottom:calc(22px + env(safe-area-inset-bottom));transform:translateX(-50%);
+    z-index:8;background:#fff;color:#ff2e6e;font-weight:900;font-size:15px;
+    padding:12px 20px;border-radius:999px;box-shadow:0 10px 26px rgba(255,46,110,.3);
+    opacity:0;pointer-events:none;max-width:92vw;text-align:center;transition:opacity .2s;
+  }
+  .reaction.show{opacity:1;}
+  .reaction.pop{animation:rpop .26s cubic-bezier(.3,1.6,.5,1);}
+  @keyframes rpop{0%{transform:translateX(-50%) scale(.72)}100%{transform:translateX(-50%) scale(1)}}
 
   .win{display:none;position:relative;z-index:2;text-align:center;max-width:440px;}
   .win.show{display:block;animation:pop .5s cubic-bezier(.3,1.5,.5,1);}
@@ -77,7 +85,6 @@
   <div class="modes" id="modes">
     <span class="mlabel">«Нет»:</span>
     <button class="mode active" data-m="slide">🐢 плавно</button>
-    <button class="mode" data-m="lazy">😴 лениво</button>
     <button class="mode" data-m="teleport">⚡ телепорт</button>
   </div>
 
@@ -90,6 +97,8 @@
       <button class="btn no" id="no">Нет</button>
     </div>
   </div>
+
+  <div class="reaction" id="reaction"></div>
 
   <div class="win" id="win">
     <div class="emoji">🥰💘</div>
@@ -104,103 +113,140 @@
   var yes  = document.getElementById("yes");
   var card = document.getElementById("card");
   var win  = document.getElementById("win");
+  var reaction = document.getElementById("reaction");
 
-  var phrases = ["Нет","Неа 😜","Точно? 👀","Признавайся 🥰","От любви не убежишь 💘","Поймай ❤️","Ну скажи «Да» 😄","Врёшь 😆","Сердце не обманешь 💞"];
-  var i = 0;
-
-  var mode = "slide";      // slide | lazy | teleport
+  var phrases = [
+    "Неа, даже не пытайся 😜",
+    "Кнопка «Нет» сломалась 🤷‍♀️",
+    "Поздно — мы всё видели 👀",
+    "От любви не убежишь 💘",
+    "Лови, если сможешь 🏃‍♀️💨",
+    "Сердце не обманешь 💞",
+    "Ну жми же «Да» 😄",
+    "Я быстрее тебя 💨",
+    "Опять мимо 😆",
+    "Тут только «Да» 💕"
+  ];
+  var i = -1;
+  var mode = "slide";        // slide | teleport
   var fixedOn = false;
   var x = 0, y = 0;
 
   function setTransition(){
-    no.style.transition =
-      mode === "slide"   ? "left .30s cubic-bezier(.2,.85,.3,1), top .30s cubic-bezier(.2,.85,.3,1), transform .12s" :
-      mode === "lazy"    ? "left .55s ease, top .55s ease, transform .12s" :
-                           "left .12s ease, top .12s ease, transform .12s";
+    no.style.transition = (mode === "slide")
+      ? "left .30s cubic-bezier(.2,.85,.3,1), top .30s cubic-bezier(.2,.85,.3,1), transform .12s"
+      : "left .12s ease, top .12s ease, transform .12s";
   }
-  function tease(){ i = (i + 1) % phrases.length; no.textContent = phrases[i]; }
+  function react(){
+    i = (i + 1) % phrases.length;
+    reaction.textContent = phrases[i];
+    reaction.classList.add("show");
+    reaction.classList.remove("pop"); void reaction.offsetWidth; reaction.classList.add("pop");
+  }
 
+  // безопасная зона строго в пределах экрана
+  function bounds(){
+    var bw = no.offsetWidth, bh = no.offsetHeight;
+    var padX = 12, topGap = 58, botGap = 78; // сверху не лезем под панель, снизу — под плашку ответов
+    return {
+      bw:bw, bh:bh,
+      minX:padX, maxX: Math.max(padX, window.innerWidth  - bw - padX),
+      minY:topGap, maxY: Math.max(topGap, window.innerHeight - bh - botGap)
+    };
+  }
   function ensureFixed(){
     if(fixedOn) return;
     var r = no.getBoundingClientRect();
     x = r.left; y = r.top;
-    no.style.position = "fixed";
-    no.style.margin = "0";
-    no.style.left = x + "px";
-    no.style.top  = y + "px";
+    no.style.position = "fixed"; no.style.margin = "0";
+    no.style.left = x + "px"; no.style.top = y + "px";
     fixedOn = true;
   }
-  function clamp(){
-    var pad = 10, bw = no.offsetWidth, bh = no.offsetHeight;
-    if(x < pad) x = pad;
-    if(y < pad) y = pad;
-    if(x > window.innerWidth  - bw - pad) x = window.innerWidth  - bw - pad;
-    if(y > window.innerHeight - bh - pad) y = window.innerHeight - bh - pad;
-  }
   function put(){ no.style.left = x + "px"; no.style.top = y + "px"; }
-
-  function teleport(){
-    ensureFixed();
-    var pad = 12, bw = no.offsetWidth, bh = no.offsetHeight;
-    x = pad + Math.random() * Math.max(1, window.innerWidth  - bw - 2*pad);
-    y = pad + Math.random() * Math.max(1, window.innerHeight - bh - 2*pad);
-    put(); tease();
+  function center(){
+    if(fixedOn) return {x:x + no.offsetWidth/2, y:y + no.offsetHeight/2};
+    var r = no.getBoundingClientRect(); return {x:r.left + r.width/2, y:r.top + r.height/2};
   }
+  function dist(ax,ay,bx,by){ var dx=ax-bx, dy=ay-by; return Math.sqrt(dx*dx+dy*dy); }
+
+  function randSpot(awayX, awayY){
+    var b = bounds(), nx, ny, t = 0;
+    do{
+      nx = b.minX + Math.random() * (b.maxX - b.minX);
+      ny = b.minY + Math.random() * (b.maxY - b.minY);
+      t++;
+    } while(dist(nx + b.bw/2, ny + b.bh/2, awayX, awayY) < 170 && t < 14);
+    return {x:nx, y:ny};
+  }
+
+  function teleport(awayX, awayY){
+    ensureFixed();
+    var p = randSpot(awayX, awayY);
+    x = p.x; y = p.y; put(); react();
+  }
+
   function dodge(px, py, step){
     ensureFixed();
-    var r = no.getBoundingClientRect();
-    var cx = r.left + r.width/2, cy = r.top + r.height/2;
-    var dx = cx - px, dy = cy - py;
-    var d = Math.sqrt(dx*dx + dy*dy) || 1;
-    x += (dx/d)*step + (Math.random()*30 - 15);
-    y += (dy/d)*step + (Math.random()*30 - 15);
-    // если упёрся в край — отскок в случайную сторону
-    var pad = 10, bw = no.offsetWidth, bh = no.offsetHeight;
-    if(x <= pad || x >= window.innerWidth - bw - pad){ x = pad + Math.random()*(window.innerWidth  - bw - 2*pad); }
-    if(y <= pad || y >= window.innerHeight - bh - pad){ y = pad + Math.random()*(window.innerHeight - bh - 2*pad); }
-    clamp(); put(); tease();
+    var b = bounds();
+    var c = center();
+    var dx = c.x - px, dy = c.y - py, d = Math.sqrt(dx*dx + dy*dy) || 1;
+    var nx = x + (dx/d) * step;
+    var ny = y + (dy/d) * step;
+    // строго в пределах экрана
+    nx = Math.max(b.minX, Math.min(nx, b.maxX));
+    ny = Math.max(b.minY, Math.min(ny, b.maxY));
+    // если у стенки и палец/курсор близко — прыжок в случайную точку (тоже в экране)
+    if(dist(nx + b.bw/2, ny + b.bh/2, px, py) < 95){
+      var p = randSpot(px, py); nx = p.x; ny = p.y;
+    }
+    x = nx; y = ny; put(); react();
   }
 
-  // ---- десктоп: реагируем на приближение курсора ----
+  // десктоп: реагируем на приближение курсора
   document.addEventListener("mousemove", function(e){
     if(win.classList.contains("show")) return;
-    if(mode === "teleport") return;            // в телепорте — на mouseenter
-    var r = no.getBoundingClientRect();
-    var cx = r.left + r.width/2, cy = r.top + r.height/2;
-    var dist = Math.sqrt(Math.pow(cx - e.clientX,2) + Math.pow(cy - e.clientY,2));
-    var th   = mode === "lazy" ? 78 : 110;
-    if(dist < th){
-      if(mode === "lazy" && Math.random() < 0.22) return;   // иногда даёт почти поймать
-      dodge(e.clientX, e.clientY, mode === "lazy" ? 95 : 150);
+    var c = center();
+    if(dist(c.x, c.y, e.clientX, e.clientY) < 115){
+      if(mode === "teleport") teleport(e.clientX, e.clientY);
+      else dodge(e.clientX, e.clientY, 150);
     }
   });
-  no.addEventListener("mouseenter", function(){ if(mode === "teleport") teleport(); });
 
-  // ---- телефон: уворачивается от касания ----
+  // телефон: уворачивается от касания
   no.addEventListener("touchstart", function(e){
     e.preventDefault();
-    if(mode === "teleport"){ teleport(); return; }
     var t = e.touches[0];
-    dodge(t.clientX, t.clientY, mode === "lazy" ? 120 : 175);
+    if(mode === "teleport") teleport(t.clientX, t.clientY);
+    else dodge(t.clientX, t.clientY, 175);
   }, {passive:false});
   no.addEventListener("click", function(e){ e.preventDefault(); });
 
-  // ---- переключатель режимов ----
+  // не вылезать за экран при повороте/изменении размера
+  window.addEventListener("resize", function(){
+    if(!fixedOn) return;
+    var b = bounds();
+    x = Math.max(b.minX, Math.min(x, b.maxX));
+    y = Math.max(b.minY, Math.min(y, b.maxY));
+    put();
+  });
+
+  // переключатель режимов
   document.getElementById("modes").addEventListener("click", function(e){
-    var b = e.target.closest(".mode"); if(!b) return;
-    mode = b.getAttribute("data-m");
-    [].forEach.call(document.querySelectorAll(".mode"), function(m){ m.classList.toggle("active", m===b); });
-    // сброс кнопки на место
-    fixedOn = false; i = 0;
+    var btn = e.target.closest(".mode"); if(!btn) return;
+    mode = btn.getAttribute("data-m");
+    [].forEach.call(document.querySelectorAll(".mode"), function(m){ m.classList.toggle("active", m === btn); });
+    // сброс на место
+    fixedOn = false; i = -1;
     no.style.position = ""; no.style.left = ""; no.style.top = ""; no.style.margin = "";
-    no.textContent = "Нет";
+    reaction.classList.remove("show");
     setTransition();
   });
 
-  // ---- "Да" ----
+  // "Да"
   yes.addEventListener("click", function(){
     card.style.display = "none";
     no.style.display = "none";
+    reaction.classList.remove("show");
     document.getElementById("modes").style.display = "none";
     win.classList.add("show");
     burst();
